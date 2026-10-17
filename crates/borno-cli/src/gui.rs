@@ -25,6 +25,7 @@ const WM_LBUTTONUP: u32 = 0x0202;
 const WM_LBUTTONDBLCLK: u32 = 0x0203;
 const WM_RBUTTONUP: u32 = 0x0205;
 const WM_COMMAND: u32 = 0x0111;
+const CS_DBLCLKS: u32 = 0x0008;
 const WM_NCHITTEST: u32 = 0x0084;
 const HTCLIENT: isize = 1;
 const HTCAPTION: isize = 2;
@@ -245,6 +246,8 @@ extern "system" {
     ) -> i32;
     fn CreateCompatibleDC(hdc: isize) -> isize;
     fn DeleteDC(hdc: isize) -> i32;
+    fn GetModuleHandleW(lpModuleName: *const u16) -> isize;
+    fn PostMessageW(hWnd: isize, Msg: u32, wParam: usize, lParam: isize) -> i32;
     fn ScreenToClient(hWnd: isize, lpPoint: *mut POINT) -> i32;
     fn CreateCompatibleBitmap(hdc: isize, cx: i32, cy: i32) -> isize;
     fn BitBlt(
@@ -380,6 +383,9 @@ unsafe extern "system" fn bar_wnd_proc(hwnd: isize, msg: u32, w_param: usize, l_
             setup_tray_icon(hwnd);
             0
         }
+        WM_LBUTTONDBLCLK => {
+            bar_wnd_proc(hwnd, WM_LBUTTONDOWN, w_param, l_param)
+        }
         WM_PAINT => {
             let mut ps: PAINTSTRUCT = std::mem::zeroed();
             let screen_dc = BeginPaint(hwnd, &mut ps);
@@ -391,6 +397,12 @@ unsafe extern "system" fn bar_wnd_proc(hwnd: isize, msg: u32, w_param: usize, l_
 
             let mem_dc = CreateCompatibleDC(screen_dc);
             let mem_bmp = CreateCompatibleBitmap(screen_dc, width, height);
+            if mem_dc == 0 || mem_bmp == 0 {
+                if mem_bmp != 0 { DeleteObject(mem_bmp); }
+                if mem_dc != 0 { DeleteDC(mem_dc); }
+                EndPaint(hwnd, &ps);
+                return 0;
+            }
             let old_bmp = SelectObject(mem_dc, mem_bmp);
 
             let is_dark = IS_DARK_THEME.load(Ordering::SeqCst);
@@ -600,6 +612,10 @@ unsafe extern "system" fn bar_wnd_proc(hwnd: isize, msg: u32, w_param: usize, l_
             let mut pt = POINT { x: x_screen, y: y_screen };
             ScreenToClient(hwnd, &mut pt);
 
+            if pt.x < 0 || pt.x >= 420 || pt.y < 0 || pt.y >= 42 {
+                return DefWindowProcW(hwnd, msg, w_param, l_param);
+            }
+
             if (pt.x >= 150 && pt.x < 284)
                 || (pt.x >= 286 && pt.x < 324)
                 || (pt.x >= 332 && pt.x < 372)
@@ -759,6 +775,7 @@ unsafe fn show_mode_popup_menu(hwnd: isize, x: i32, y: i32) {
 
     SetForegroundWindow(hwnd);
     TrackPopupMenuEx(menu, TPM_RIGHTBUTTON, x, y, hwnd, std::ptr::null_mut());
+    PostMessageW(hwnd, 0, 0, 0);
     DestroyMenu(menu);
 }
 
@@ -786,6 +803,7 @@ unsafe fn show_settings_popup_menu(hwnd: isize, x: i32, y: i32) {
 
     SetForegroundWindow(hwnd);
     TrackPopupMenuEx(menu, TPM_RIGHTBUTTON, x, y, hwnd, std::ptr::null_mut());
+    PostMessageW(hwnd, 0, 0, 0);
     DestroyMenu(menu);
 }
 
@@ -827,6 +845,7 @@ unsafe fn show_tray_context_menu(hwnd: isize, x: i32, y: i32) {
 
     SetForegroundWindow(hwnd);
     TrackPopupMenuEx(menu, TPM_RIGHTBUTTON, x, y, hwnd, std::ptr::null_mut());
+    PostMessageW(hwnd, 0, 0, 0);
     DestroyMenu(menu);
 }
 
@@ -854,6 +873,7 @@ unsafe fn setup_tray_icon(hwnd: isize) {
 
 /// Dynamically updates the System Tray icon and tooltip to reflect the active mode.
 static LAST_TRAY_MODE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(255);
+static LAST_TRAY_TIME: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 unsafe fn update_tray_icon_and_tooltip(hwnd: isize) {
     let mode = crate::windows_hook::get_current_mode();
@@ -863,9 +883,18 @@ unsafe fn update_tray_icon_and_tooltip(hwnd: isize) {
         InputMode::Phonetic => 2,
         _ => 3,
     };
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+    let last = LAST_TRAY_TIME.load(Ordering::SeqCst);
+    if now.saturating_sub(last) < 60 {
+        return;
+    }
     if LAST_TRAY_MODE.swap(mode_num, Ordering::SeqCst) == mode_num {
         return;
     }
+    LAST_TRAY_TIME.store(now, Ordering::SeqCst);
     let mut nid: NOTIFYICONDATAW = std::mem::zeroed();
     nid.cbSize = std::mem::size_of::<NOTIFYICONDATAW>() as u32;
     nid.hWnd = hwnd;
@@ -898,14 +927,15 @@ pub fn launch_gui_and_message_loop() {
     unsafe {
         let class_name = to_wide("BornoFreeFloatingBar");
         let default_hicon = get_or_load_tray_icon();
+        let h_instance = GetModuleHandleW(std::ptr::null());
 
         let wc = WNDCLASSEXW {
             cbSize: std::mem::size_of::<WNDCLASSEXW>() as u32,
-            style: 0,
+            style: CS_DBLCLKS,
             lpfnWndProc: bar_wnd_proc,
             cbClsExtra: 0,
             cbWndExtra: 0,
-            hInstance: 0,
+            hInstance: h_instance,
             hIcon: default_hicon,
             hCursor: LoadCursorW(0, 32512 as *const u16),
             hbrBackground: 0,
@@ -937,7 +967,7 @@ pub fn launch_gui_and_message_loop() {
             bar_height,
             0,
             0,
-            0,
+            h_instance,
             std::ptr::null_mut(),
         );
 
