@@ -1,0 +1,31 @@
+# Rust Build Artifacts
+/target/
+**/*.rs.bk
+
+# Compiled Binaries & Distribution Artifacts
+*.exe
+*.dll
+*.pdb
+*.zip
+*.tar.gz
+*.msi
+/dist/
+/BornoFree-*/
+SHA256SUMS.txt
+
+# Runtime State & Logs
+/state/
+*.log
+*.tmp
+
+# IDE & Editor Files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS Generated Files
+Thumbs.db
+Desktop.ini
+.DS_Store

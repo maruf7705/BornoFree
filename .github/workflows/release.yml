@@ -1,0 +1,95 @@
+name: Release BornoFree
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build & Package Windows x64
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Cargo Dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Run Tests
+        run: cargo test --workspace --release
+
+      - name: Build & Package Release
+        shell: pwsh
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $version = if ($tag -match '^v(\d+\.\d+\.\d+)') { $Matches[1] } else { "1.0.0" }
+          Write-Host "Packaging version: $version"
+          .\scripts\package-release.ps1 -Version $version
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: BornoFree-Windows-x64
+          path: |
+            dist/BornoFree-Setup.exe
+            dist/BornoFree.exe
+            dist/BornoFree-*-Windows-x64.zip
+            dist/SHA256SUMS.txt
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/BornoFree-Setup.exe
+            dist/BornoFree.exe
+            dist/BornoFree-*-Windows-x64.zip
+            dist/SHA256SUMS.txt
+          name: "BornoFree ${{ github.ref_name }} (বর্ণফ্রি)"
+          body: |
+            ## বর্ণফ্রি (BornoFree) ${{ github.ref_name }} রিলিজ
+
+            উইন্ডোজের জন্য আধুনিক, দ্রুত এবং উন্মুক্ত বাংলা টাইপিং ইঞ্জিন ও কীবোর্ড সফটওয়্যার।
+
+            ### ডাউনলোড অপশনসমূহ (Download Assets):
+            * **[BornoFree-Setup.exe](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/BornoFree-Setup.exe)** - অফিসিয়াল উইন্ডোজ ইনস্টলার উইজার্ড
+            * **[BornoFree.exe](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/BornoFree.exe)** - পোর্টেবল এক্সিকিউটেবল
+            * **[BornoFree-${{ github.ref_name }}-Windows-x64.zip](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/BornoFree-${{ github.ref_name }}-Windows-x64.zip)** - সম্পূর্ণ পোর্টেবল রিলিজ প্যাকেজ
+
+            ---
+
+            ### কীবোর্ড শর্টকাট (Keyboard Shortcuts):
+            | শর্টকাট | মোড |
+            | :--- | :--- |
+            | `Ctrl + Alt + V` | **বর্ণ ইউনিকোড (Borno Unicode)** |
+            | `Ctrl + Alt + E` | **ইংরেজি (English)** |
+            | `F12` | দ্রুত মোড টগল (Quick Toggle) |
+
+            ---
+
+            ### বৈশিষ্ট্য ও উন্নয়ন (Highlights):
+            - **শূন্য ল্যাগ ও নেটিভ উইন্ডোজ সাপোর্ট:** সম্পূর্ণ Rust ও Win32 API দিয়ে নির্মিত (< 15MB RAM).
+            - **আধুনিক ভাসমান টুলবার:** Light ও Dark মোড সাপোর্টসহ মিনিমাল ইউজার ইন্টারফেস।
+            - **উন্নত যুক্তাক্ষর ও জটিল টেক্সট রেন্ডারিং (CTL):** আধুনিক ব্রাউজার, MS Word, Photoshop এবং Notepad-এ শতভাগ সঠিক যুক্তাক্ষর সমর্থন।
+            - **ওপেন সোর্স:** MIT লাইসেন্সের অধীনে সম্পূর্ণ উন্মুক্ত।
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

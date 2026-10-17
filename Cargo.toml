@@ -1,0 +1,22 @@
+[workspace]
+members = [
+    "crates/borno-core",
+    "crates/borno-cli",
+    "crates/borno-installer",
+]
+resolver = "2"
+
+[workspace.package]
+version = "1.0.1"
+edition = "2021"
+authors = ["Maruf Islam"]
+license = "MIT"
+repository = "https://github.com/maruf7705/BornoFree"
+description = "BornoFree: High-Performance, Cross-Platform Bengali Typing Engine & Input System"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

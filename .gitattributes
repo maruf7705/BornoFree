@@ -1,0 +1,4 @@
+# Exclude build, packaging and helper scripts from GitHub language stats
+scripts/* linguist-vendored
+*.cmd linguist-vendored
+*.ps1 linguist-vendored

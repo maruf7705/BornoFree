@@ -1,0 +1,16 @@
+[package]
+name = "borno-installer"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Native Windows GUI Setup Wizard Installer for BornoFree"
+
+[[bin]]
+name = "BornoFree-Setup"
+path = "src/main.rs"
+
+[dependencies]
+
+[build-dependencies]
+winres = "0.1.12"
