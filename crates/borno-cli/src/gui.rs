@@ -21,11 +21,13 @@ const WM_CREATE: u32 = 0x0001;
 const WM_DESTROY: u32 = 0x0002;
 const WM_PAINT: u32 = 0x000F;
 const WM_LBUTTONDOWN: u32 = 0x0201;
+const WM_LBUTTONUP: u32 = 0x0202;
 const WM_LBUTTONDBLCLK: u32 = 0x0203;
 const WM_RBUTTONUP: u32 = 0x0205;
 const WM_COMMAND: u32 = 0x0111;
-const WM_NCLBUTTONDOWN: u32 = 0x00A1;
-const HTCAPTION: usize = 2;
+const WM_NCHITTEST: u32 = 0x0084;
+const HTCLIENT: isize = 1;
+const HTCAPTION: isize = 2;
 
 const NIM_ADD: u32 = 0x00000000;
 const NIM_MODIFY: u32 = 0x00000001;
@@ -186,8 +188,6 @@ extern "system" {
     fn InvalidateRect(hWnd: isize, lpRect: *const RECT, bErase: i32) -> i32;
     fn GetClientRect(hWnd: isize, lpRect: *mut RECT) -> i32;
     fn GetSystemMetrics(nIndex: i32) -> i32;
-    fn ReleaseCapture() -> i32;
-    fn SendMessageW(hWnd: isize, Msg: u32, wParam: usize, lParam: isize) -> isize;
     fn BeginPaint(hWnd: isize, lpPaint: *mut PAINTSTRUCT) -> isize;
     fn EndPaint(hWnd: isize, lpPaint: *const PAINTSTRUCT) -> i32;
     fn FillRect(hDC: isize, lprc: *const RECT, hbr: isize) -> i32;
@@ -244,6 +244,8 @@ extern "system" {
         diFlags: u32,
     ) -> i32;
     fn CreateCompatibleDC(hdc: isize) -> isize;
+    fn DeleteDC(hdc: isize) -> i32;
+    fn ScreenToClient(hWnd: isize, lpPoint: *mut POINT) -> i32;
     fn CreateCompatibleBitmap(hdc: isize, cx: i32, cy: i32) -> isize;
     fn BitBlt(
         hdcDest: isize,
@@ -545,7 +547,7 @@ unsafe extern "system" fn bar_wnd_proc(hwnd: isize, msg: u32, w_param: usize, l_
 
             SelectObject(mem_dc, old_bmp);
             DeleteObject(mem_bmp);
-            DeleteObject(mem_dc);
+            DeleteDC(mem_dc);
 
             EndPaint(hwnd, &ps);
             0
@@ -590,10 +592,23 @@ unsafe extern "system" fn bar_wnd_proc(hwnd: isize, msg: u32, w_param: usize, l_
                 return 0;
             }
 
-            // 5. Click on Brand / Background (< 150px) -> DRAG WINDOW!
-            ReleaseCapture();
-            SendMessageW(hwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0);
             0
+        }
+        WM_NCHITTEST => {
+            let x_screen = (l_param & 0xFFFF) as i16 as i32;
+            let y_screen = ((l_param >> 16) & 0xFFFF) as i16 as i32;
+            let mut pt = POINT { x: x_screen, y: y_screen };
+            ScreenToClient(hwnd, &mut pt);
+
+            if (pt.x >= 150 && pt.x < 284)
+                || (pt.x >= 286 && pt.x < 324)
+                || (pt.x >= 332 && pt.x < 372)
+                || (pt.x >= 380)
+            {
+                HTCLIENT
+            } else {
+                HTCAPTION
+            }
         }
         WM_RBUTTONUP => {
             // Right-click anywhere on the floating toolbar -> Pop settings menu
@@ -677,8 +692,8 @@ unsafe extern "system" fn bar_wnd_proc(hwnd: isize, msg: u32, w_param: usize, l_
                 GetCursorPos(&mut pt);
                 SetForegroundWindow(hwnd);
                 show_tray_context_menu(hwnd, pt.x, pt.y);
-            } else if event == WM_LBUTTONDOWN || event == WM_LBUTTONDBLCLK {
-                // Left click or Double click on System Tray icon -> Restore / Toggle floating bar!
+            } else if event == WM_LBUTTONUP {
+                // Left click on System Tray icon -> Restore / Toggle floating bar!
                 let visible = IS_BAR_VISIBLE.load(Ordering::SeqCst);
                 if visible {
                     ShowWindow(hwnd, SW_HIDE);
@@ -688,6 +703,10 @@ unsafe extern "system" fn bar_wnd_proc(hwnd: isize, msg: u32, w_param: usize, l_
                     SetForegroundWindow(hwnd);
                     IS_BAR_VISIBLE.store(true, Ordering::SeqCst);
                 }
+            } else if event == WM_LBUTTONDBLCLK {
+                ShowWindow(hwnd, SW_SHOW);
+                SetForegroundWindow(hwnd);
+                IS_BAR_VISIBLE.store(true, Ordering::SeqCst);
             }
             0
         }
@@ -834,8 +853,19 @@ unsafe fn setup_tray_icon(hwnd: isize) {
 }
 
 /// Dynamically updates the System Tray icon and tooltip to reflect the active mode.
+static LAST_TRAY_MODE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(255);
+
 unsafe fn update_tray_icon_and_tooltip(hwnd: isize) {
     let mode = crate::windows_hook::get_current_mode();
+    let mode_num = match mode {
+        InputMode::English => 0,
+        InputMode::BornoUnicode => 1,
+        InputMode::Phonetic => 2,
+        _ => 3,
+    };
+    if LAST_TRAY_MODE.swap(mode_num, Ordering::SeqCst) == mode_num {
+        return;
+    }
     let mut nid: NOTIFYICONDATAW = std::mem::zeroed();
     nid.cbSize = std::mem::size_of::<NOTIFYICONDATAW>() as u32;
     nid.hWnd = hwnd;
