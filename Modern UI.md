@@ -6,3 +6,9 @@ I will be updating it with a more modern and polished look, and the update will 
 2. Updated color palette
 3. Bar system
 4. New keyboard
+
+layout -
+Unicode - 
+Avro - 
+
+update --- 
