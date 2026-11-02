@@ -61,14 +61,16 @@ void eraseBeforeCursor(fcitx::InputContext *inputContext, size_t count) {
         return;
     }
 
-    if (inputContext->capabilityFlags().test(fcitx::CapabilityFlag::SurroundingText)) {
+    if (inputContext->capabilityFlags().test(fcitx::CapabilityFlag::SurroundingText) &&
+        inputContext->surroundingText().isValid()) {
         inputContext->deleteSurroundingText(-static_cast<int>(count), count);
         return;
     }
 
-    // Fallback for terminal and legacy XIM clients that do not expose surrounding text.
+    // Fallback for clients without valid surrounding text: send press + release
     for (size_t i = 0; i < count; ++i) {
-        inputContext->forwardKey(fcitx::Key(FcitxKey_BackSpace));
+        inputContext->forwardKey(fcitx::Key(FcitxKey_BackSpace), false);
+        inputContext->forwardKey(fcitx::Key(FcitxKey_BackSpace), true);
     }
 }
 

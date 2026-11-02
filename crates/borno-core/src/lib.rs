@@ -322,6 +322,47 @@ mod tests {
     }
 
     #[test]
+    fn test_set_mode_idempotent_during_typing() {
+        let mut engine = BornoEngine::new();
+        engine.set_mode(InputMode::BornoUnicode);
+
+        // Type 'g' ('্')
+        let act1 = engine.handle_key('g', false, false, false);
+        assert_eq!(act1, EngineAction::Emit("্".to_string()));
+
+        // Fcitx5 invokes set_mode on subsequent keyEvent
+        engine.set_mode(InputMode::BornoUnicode);
+
+        // Type 'f' ('া') -> must form 'আ' with backspace: 1
+        let act2 = engine.handle_key('f', false, false, false);
+        assert_eq!(
+            act2,
+            EngineAction::Replace {
+                backspaces: 1,
+                text: "আ".to_string()
+            }
+        );
+
+        // Pre-kar test: type 'd' ('ি')
+        engine.set_mode(InputMode::BornoUnicode);
+        let act3 = engine.handle_key('d', false, false, false);
+        assert_eq!(
+            act3,
+            EngineAction::Replace {
+                backspaces: 0,
+                text: "".to_string()
+            }
+        );
+
+        // Fcitx5 set_mode again
+        engine.set_mode(InputMode::BornoUnicode);
+
+        // Type 'l' ('দ') -> must emit 'দি'
+        let act4 = engine.handle_key('l', false, false, false);
+        assert_eq!(act4, EngineAction::Emit("দি".to_string()));
+    }
+
+    #[test]
     fn test_hotkey_switching() {
         let mut engine = BornoEngine::new();
         assert_eq!(engine.mode, InputMode::English);

@@ -62,6 +62,9 @@ impl BornoEngine {
 
     /// Set the current input mode.
     pub fn set_mode(&mut self, new_mode: InputMode) {
+        if self.mode == new_mode {
+            return;
+        }
         if new_mode != InputMode::English {
             self.prev_bangla_mode = new_mode;
         }
