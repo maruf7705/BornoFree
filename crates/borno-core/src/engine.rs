@@ -29,6 +29,8 @@ pub struct BornoEngine {
     buffer: String,
     pub pending_pre_kar: Option<char>,
     pub pending_bindu: Option<char>,
+    pub phonetic_raw_buffer: String,
+    pub phonetic_rendered_len: usize,
 }
 
 impl Default for BornoEngine {
@@ -47,6 +49,8 @@ impl BornoEngine {
             buffer: String::with_capacity(64),
             pending_pre_kar: None,
             pending_bindu: None,
+            phonetic_raw_buffer: String::with_capacity(32),
+            phonetic_rendered_len: 0,
         }
     }
 
@@ -59,6 +63,8 @@ impl BornoEngine {
         self.buffer.clear();
         self.pending_pre_kar = None;
         self.pending_bindu = None;
+        self.phonetic_raw_buffer.clear();
+        self.phonetic_rendered_len = 0;
     }
 
     /// Returns the current text buffer.
@@ -115,6 +121,15 @@ impl BornoEngine {
                     self.set_mode(InputMode::English);
                     return EngineAction::ModeSwitch(InputMode::English);
                 }
+                'P' | 'A' => {
+                    let target_mode = if self.mode == InputMode::Phonetic {
+                        InputMode::English
+                    } else {
+                        InputMode::Phonetic
+                    };
+                    self.set_mode(target_mode);
+                    return EngineAction::ModeSwitch(target_mode);
+                }
                 _ => {}
             }
         }
@@ -129,28 +144,60 @@ impl BornoEngine {
             return EngineAction::Passthrough;
         }
 
-        // 3. Avro Phonetic Mode
+        // 3. Avro Phonetic Mode (Live Zero-Latency Dynamic Transliteration)
         if self.mode == InputMode::Phonetic {
-            if key == ' ' || key == '\n' || key == '\t' {
-                // Word boundary: commit phonetic transliteration
-                if !self.buffer.is_empty() {
-                    let out = self.phonetic.transliterate(&self.buffer);
-                    let backspaces = self.buffer.len();
-                    self.buffer.clear();
-                    return EngineAction::Replace {
-                        backspaces,
-                        text: format!("{}{}", out, key),
-                    };
+            // Handle Backspace within the active phonetic token
+            if key == '\x08' {
+                if !self.phonetic_raw_buffer.is_empty() {
+                    self.phonetic_raw_buffer.pop();
+                    if self.phonetic_raw_buffer.is_empty() {
+                        let backspaces = self.phonetic_rendered_len;
+                        self.phonetic_rendered_len = 0;
+                        return EngineAction::Replace {
+                            backspaces,
+                            text: String::new(),
+                        };
+                    } else {
+                        let out = self.phonetic.transliterate(&self.phonetic_raw_buffer);
+                        let backspaces = self.phonetic_rendered_len;
+                        self.phonetic_rendered_len = out.chars().count();
+                        return EngineAction::Replace {
+                            backspaces,
+                            text: out,
+                        };
+                    }
                 }
                 return EngineAction::Passthrough;
-            } else if key == '\x08' {
-                // Backspace
-                self.buffer.pop();
-                return EngineAction::Passthrough;
-            } else if key.is_ascii_alphabetic() {
-                self.buffer.push(key);
-                return EngineAction::Passthrough;
             }
+
+            // Word boundaries: Space, Enter, Tab commit current token
+            if key == ' ' || key == '\n' || key == '\t' {
+                self.phonetic_raw_buffer.clear();
+                self.phonetic_rendered_len = 0;
+                return EngineAction::Emit(key.to_string());
+            }
+
+            // Map key with Shift modifier
+            let ch = if shift && key.is_ascii_alphabetic() {
+                key.to_ascii_uppercase()
+            } else if shift && key == ';' {
+                ':'
+            } else if shift && key == '4' {
+                '$'
+            } else if shift && key == '6' {
+                '^'
+            } else {
+                key
+            };
+
+            self.phonetic_raw_buffer.push(ch);
+            let out = self.phonetic.transliterate(&self.phonetic_raw_buffer);
+            let backspaces = self.phonetic_rendered_len;
+            self.phonetic_rendered_len = out.chars().count();
+            return EngineAction::Replace {
+                backspaces,
+                text: out,
+            };
         }
 
         // 4. Borno Unicode Mode (with Pre-Kar Deferred Reordering)

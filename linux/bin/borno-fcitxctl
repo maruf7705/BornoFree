@@ -3,16 +3,18 @@
 set -euo pipefail
 
 readonly BORNO_IM="${BORNOFREE_BENGALI_IM:-borno}"
+readonly PHONETIC_IM="${BORNOFREE_PHONETIC_IM:-borno-phonetic}"
 readonly ENGLISH_IM="${BORNOFREE_ENGLISH_IM:-keyboard-us}"
 readonly REMOTE="${FCITX5_REMOTE:-fcitx5-remote}"
 
 usage() {
     cat <<'EOF'
-Usage: borno-fcitxctl {toggle|bangla|english|status}
+Usage: borno-fcitxctl {toggle|bangla|phonetic|english|status}
 
 Environment overrides:
-  BORNOFREE_BENGALI_IM   Fcitx input method name (default: borno)
-  BORNOFREE_ENGLISH_IM   Fcitx English method name (default: keyboard-us)
+  BORNOFREE_BENGALI_IM    Fcitx Unicode input method name (default: borno)
+  BORNOFREE_PHONETIC_IM   Fcitx Phonetic input method name (default: borno-phonetic)
+  BORNOFREE_ENGLISH_IM    Fcitx English method name (default: keyboard-us)
 EOF
 }
 
@@ -41,11 +43,12 @@ current_im() {
 
 set_im() {
     "$REMOTE" -s "$1"
+    sleep 0.05
 }
 
 command_name="${1:-}"
 case "$command_name" in
-    toggle|bangla|english|status) ;;
+    toggle|bangla|phonetic|english|status) ;;
     -h|--help|help|'') usage; exit 0 ;;
     *) usage >&2; exit 2 ;;
 esac
@@ -55,17 +58,20 @@ current="$(current_im)"
 
 case "$command_name" in
     toggle)
-        if [[ "$current" == "$BORNO_IM" ]]; then
+        if [[ "$current" == "$BORNO_IM" || "$current" == "$PHONETIC_IM" ]]; then
             set_im "$ENGLISH_IM"
         else
             set_im "$BORNO_IM"
         fi
         ;;
     bangla) set_im "$BORNO_IM" ;;
+    phonetic) set_im "$PHONETIC_IM" ;;
     english) set_im "$ENGLISH_IM" ;;
     status)
         if [[ "$current" == "$BORNO_IM" ]]; then
             printf 'অ\n'
+        elif [[ "$current" == "$PHONETIC_IM" ]]; then
+            printf 'ফো\n'
         else
             printf 'EN\n'
         fi
@@ -76,6 +82,8 @@ esac
 current="$(current_im)"
 if [[ "$current" == "$BORNO_IM" ]]; then
     printf 'অ\n'
+elif [[ "$current" == "$PHONETIC_IM" ]]; then
+    printf 'ফো\n'
 else
     printf 'EN\n'
 fi

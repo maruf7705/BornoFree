@@ -23,6 +23,7 @@ env = SDL_IM_MODULE,fcitx
 exec-once = fcitx5 -d
 bind = , F12, exec, borno-fcitxctl toggle
 bind = CTRL ALT, V, exec, borno-fcitxctl bangla
+bind = CTRL ALT, P, exec, borno-fcitxctl phonetic
 bind = CTRL ALT, E, exec, borno-fcitxctl english
 {END}
 """
@@ -91,7 +92,8 @@ def ensure_profile(profile: Path) -> bool:
         profile.write_text(
             "[Groups/0]\nName=Default\nDefault Layout=us\nDefaultIM=keyboard-us\n\n"
             "[Groups/0/Items/0]\nName=keyboard-us\nLayout=\n\n"
-            "[Groups/0/Items/1]\nName=borno\nLayout=\n\n[GroupOrder]\n0=Default\n",
+            "[Groups/0/Items/1]\nName=borno\nLayout=\n\n"
+            "[Groups/0/Items/2]\nName=borno-phonetic\nLayout=\n\n[GroupOrder]\n0=Default\n",
             encoding="utf-8",
         )
         return True
@@ -113,7 +115,7 @@ def ensure_profile(profile: Path) -> bool:
     }
     next_index = max((int(index) for index, _ in items), default=-1) + 1
     additions: list[str] = []
-    for name in ("keyboard-us", "borno"):
+    for name in ("keyboard-us", "borno", "borno-phonetic"):
         if name not in names:
             additions.append(f"[Groups/{group}/Items/{next_index}]\nName={name}\nLayout=\n")
             next_index += 1

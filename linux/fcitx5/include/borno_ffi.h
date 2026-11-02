@@ -25,6 +25,7 @@ typedef struct BornoAction {
 
 BornoEngine *borno_engine_new(void);
 void borno_engine_reset(BornoEngine *engine);
+void borno_engine_set_mode(BornoEngine *engine, uint32_t mode);
 void borno_engine_free(BornoEngine *engine);
 BornoAction borno_engine_handle_key(BornoEngine *engine, uint32_t key,
                                     uint8_t shift, uint8_t ctrl, uint8_t alt);

@@ -38,8 +38,9 @@ add the same environment values, `exec-once`, and bindings manually.
 
 | Shortcut | Result |
 | --- | --- |
-| `F12` | Toggle English and Borno Unicode |
+| `F12` | Toggle English and Bengali |
 | `Ctrl+Alt+V` | Select Borno Unicode (`অ`) |
+| `Ctrl+Alt+P` | Select Avro Phonetic (`ফো`) |
 | `Ctrl+Alt+E` | Select English (`EN`) |
 
 The controller defaults to `keyboard-us` for English. Override it when your

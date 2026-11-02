@@ -292,6 +292,33 @@ mod tests {
         let phonetic = PhoneticEngine::new();
         assert_eq!(phonetic.transliterate("ami"), "আমি");
         assert_eq!(phonetic.transliterate("bangla"), "বাংলা");
+        assert_eq!(phonetic.transliterate("amader valObasa"), "আমাদের ভালোবাসা");
+    }
+
+    #[test]
+    fn test_live_phonetic_keystroke_typing() {
+        let mut engine = BornoEngine::new();
+        engine.set_mode(InputMode::Phonetic);
+
+        // Type 'a' -> "আ"
+        let act1 = engine.handle_key('a', false, false, false);
+        assert_eq!(act1, EngineAction::Replace { backspaces: 0, text: "আ".to_string() });
+
+        // Type 'm' -> replaces 'অ' (1 backspace) with "আম"
+        let act2 = engine.handle_key('m', false, false, false);
+        assert_eq!(act2, EngineAction::Replace { backspaces: 1, text: "আম".to_string() });
+
+        // Type 'i' -> replaces 'আম' (2 backspaces) with "আমি"
+        let act3 = engine.handle_key('i', false, false, false);
+        assert_eq!(act3, EngineAction::Replace { backspaces: 2, text: "আমি".to_string() });
+
+        // Backspace removes 'i', restores 'আম' (3 backspaces for "আমি" which has 3 chars: আ, ম, ি)
+        let act4 = engine.handle_key('\x08', false, false, false);
+        assert_eq!(act4, EngineAction::Replace { backspaces: 3, text: "আম".to_string() });
+
+        // Space commits word
+        let act5 = engine.handle_key(' ', false, false, false);
+        assert_eq!(act5, EngineAction::Emit(" ".to_string()));
     }
 
     #[test]

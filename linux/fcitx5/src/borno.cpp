@@ -4,6 +4,8 @@
 #include <string>
 
 #include <fcitx/addonfactory.h>
+#include <fcitx/addonmanager.h>
+#include <fcitx/instance.h>
 #include <fcitx/inputcontext.h>
 #include <fcitx/inputcontextproperty.h>
 #include <fcitx/inputmethodengine.h>
@@ -67,15 +69,29 @@ void eraseBeforeCursor(fcitx::InputContext *inputContext, size_t count) {
 
 class BornoFcitxEngine final : public fcitx::InputMethodEngineV2 {
 public:
-    void activate(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) override {
-        event.inputContext()->propertyFor(&stateFactory_)->reset();
+    explicit BornoFcitxEngine(fcitx::Instance *instance) : instance_(instance) {
+        if (instance_) {
+            instance_->inputContextManager().registerProperty("bornoState", &stateFactory_);
+        }
+    }
+
+    ~BornoFcitxEngine() override = default;
+
+    void activate(const fcitx::InputMethodEntry &entry, fcitx::InputContextEvent &event) override {
+        auto *state = event.inputContext()->propertyFor(&stateFactory_);
+        state->reset();
+        if (entry.uniqueName() == "borno-phonetic") {
+            borno_engine_set_mode(state->engine(), 3);
+        } else {
+            borno_engine_set_mode(state->engine(), 1);
+        }
     }
 
     void deactivate(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) override {
         event.inputContext()->propertyFor(&stateFactory_)->reset();
     }
 
-    void keyEvent(const fcitx::InputMethodEntry &, fcitx::KeyEvent &event) override {
+    void keyEvent(const fcitx::InputMethodEntry &entry, fcitx::KeyEvent &event) override {
         if (event.isRelease() || event.key().isModifier()) {
             return;
         }
@@ -91,6 +107,9 @@ public:
         const auto alt = states.test(fcitx::KeyState::Alt) ? 1 : 0;
         auto *inputContext = event.inputContext();
         auto *state = inputContext->propertyFor(&stateFactory_);
+        if (entry.uniqueName() == "borno-phonetic") {
+            borno_engine_set_mode(state->engine(), 3);
+        }
         const auto action = borno_engine_handle_key(state->engine(), key, shift, ctrl, alt);
 
         std::string text = action.text == nullptr ? "" : action.text;
@@ -115,13 +134,14 @@ public:
     }
 
 private:
-    fcitx::FactoryFor<BornoState> stateFactory_;
+    fcitx::Instance *instance_{nullptr};
+    fcitx::FactoryFor<BornoState> stateFactory_{[](fcitx::InputContext &) { return new BornoState(); }};
 };
 
 class BornoFcitxFactory final : public fcitx::AddonFactory {
 public:
-    fcitx::AddonInstance *create(fcitx::AddonManager *) override {
-        return new BornoFcitxEngine();
+    fcitx::AddonInstance *create(fcitx::AddonManager *manager) override {
+        return new BornoFcitxEngine(manager ? manager->instance() : nullptr);
     }
 };
 

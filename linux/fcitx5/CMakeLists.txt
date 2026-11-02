@@ -39,6 +39,8 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/borno-addon.conf"
         DESTINATION "${CMAKE_INSTALL_DATADIR}/fcitx5/addon" RENAME "borno.conf")
 install(FILES "${CMAKE_CURRENT_LIST_DIR}/borno-inputmethod.conf"
         DESTINATION "${CMAKE_INSTALL_DATADIR}/fcitx5/inputmethod" RENAME "borno.conf")
+install(FILES "${CMAKE_CURRENT_LIST_DIR}/borno-phonetic-inputmethod.conf"
+        DESTINATION "${CMAKE_INSTALL_DATADIR}/fcitx5/inputmethod" RENAME "borno-phonetic.conf")
 install(FILES "${BORNO_ROOT}/linux/assets/borno.svg"
         DESTINATION "${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps" RENAME "borno.svg")
 install(PROGRAMS "${BORNO_ROOT}/linux/bin/borno-fcitxctl"

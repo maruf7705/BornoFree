@@ -80,6 +80,22 @@ pub unsafe extern "C" fn borno_engine_reset(engine: *mut BornoEngine) {
     }
 }
 
+/// Sets the input mode for the engine.
+/// 0: English, 1: Borno Unicode, 2: Jatiya, 3: Avro Phonetic.
+#[no_mangle]
+pub unsafe extern "C" fn borno_engine_set_mode(engine: *mut BornoEngine, mode: u32) {
+    if let Some(engine) = engine.as_mut() {
+        let input_mode = match mode {
+            0 => InputMode::English,
+            1 => InputMode::BornoUnicode,
+            2 => InputMode::Jatiya,
+            3 => InputMode::Phonetic,
+            _ => InputMode::BornoUnicode,
+        };
+        engine.set_mode(input_mode);
+    }
+}
+
 /// Frees an engine allocated by [`borno_engine_new`].
 #[no_mangle]
 pub unsafe extern "C" fn borno_engine_free(engine: *mut BornoEngine) {
