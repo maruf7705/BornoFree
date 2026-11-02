@@ -167,6 +167,14 @@ unsafe extern "system" fn keyboard_hook_proc(n_code: i32, w_param: usize, l_para
                     }
                     return 1; // Eat physical keystroke
                 }
+                EngineAction::Preedit(_) => {}
+                EngineAction::Commit(text) => {
+                    for c in text.chars() {
+                        send_unicode_char(c);
+                    }
+                    return 1;
+                }
+                EngineAction::Reset => {}
                 EngineAction::Passthrough => {}
             }
         }

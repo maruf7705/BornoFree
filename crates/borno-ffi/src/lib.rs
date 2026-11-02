@@ -14,6 +14,9 @@ pub const BORNO_ACTION_PASSTHROUGH: u32 = 0;
 pub const BORNO_ACTION_EMIT: u32 = 1;
 pub const BORNO_ACTION_REPLACE: u32 = 2;
 pub const BORNO_ACTION_MODE_SWITCH: u32 = 3;
+pub const BORNO_ACTION_PREEDIT: u32 = 4;
+pub const BORNO_ACTION_COMMIT: u32 = 5;
+pub const BORNO_ACTION_RESET: u32 = 6;
 
 /// An owned response from the typing engine.
 ///
@@ -56,6 +59,21 @@ fn into_ffi_action(action: EngineAction) -> BornoAction {
             backspaces,
             text: owned_text(text),
         },
+        EngineAction::Preedit(text) => BornoAction {
+            kind: BORNO_ACTION_PREEDIT,
+            backspaces: 0,
+            text: owned_text(text),
+        },
+        EngineAction::Commit(text) => BornoAction {
+            kind: BORNO_ACTION_COMMIT,
+            backspaces: 0,
+            text: owned_text(text),
+        },
+        EngineAction::Reset => BornoAction {
+            kind: BORNO_ACTION_RESET,
+            backspaces: 0,
+            text: ptr::null_mut(),
+        },
         EngineAction::ModeSwitch(_) => BornoAction {
             kind: BORNO_ACTION_MODE_SWITCH,
             backspaces: 0,
@@ -72,11 +90,11 @@ pub extern "C" fn borno_engine_new() -> *mut BornoEngine {
     Box::into_raw(Box::new(engine))
 }
 
-/// Clears unfinished composition and restores Borno Unicode mode.
+/// Clears unfinished composition buffers without changing the active input mode.
 #[no_mangle]
 pub unsafe extern "C" fn borno_engine_reset(engine: *mut BornoEngine) {
     if let Some(engine) = engine.as_mut() {
-        engine.set_mode(InputMode::BornoUnicode);
+        engine.reset_buffers();
     }
 }
 

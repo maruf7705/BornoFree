@@ -16,6 +16,12 @@ pub enum EngineAction {
         backspaces: usize,
         text: String,
     },
+    /// Set the inline preedit composition preview.
+    Preedit(String),
+    /// Commit the completed composition string and reset preedit.
+    Commit(String),
+    /// Reset active composition/preedit without committing.
+    Reset,
     /// Layout mode was switched (e.g. from English to Borno Unicode).
     ModeSwitch(InputMode),
 }
@@ -60,6 +66,11 @@ impl BornoEngine {
             self.prev_bangla_mode = new_mode;
         }
         self.mode = new_mode;
+        self.reset_buffers();
+    }
+
+    /// Resets all active composition and typing buffers without changing the mode.
+    pub fn reset_buffers(&mut self) {
         self.buffer.clear();
         self.pending_pre_kar = None;
         self.pending_bindu = None;
@@ -144,60 +155,98 @@ impl BornoEngine {
             return EngineAction::Passthrough;
         }
 
-        // 3. Avro Phonetic Mode (Live Zero-Latency Dynamic Transliteration)
+        // 3. Avro Phonetic Mode (Clean, zero-latency preedit composition)
         if self.mode == InputMode::Phonetic {
-            // Handle Backspace within the active phonetic token
-            if key == '\x08' {
+            // Escape: Cancel active phonetic composition
+            if key == '\x1b' {
+                if !self.phonetic_raw_buffer.is_empty() {
+                    self.phonetic_raw_buffer.clear();
+                    self.phonetic_rendered_len = 0;
+                    return EngineAction::Reset;
+                }
+                return EngineAction::Passthrough;
+            }
+
+            // Backspace: Delete within active preedit composition
+            if key == '\x08' || key == '\x7f' {
                 if !self.phonetic_raw_buffer.is_empty() {
                     self.phonetic_raw_buffer.pop();
                     if self.phonetic_raw_buffer.is_empty() {
-                        let backspaces = self.phonetic_rendered_len;
                         self.phonetic_rendered_len = 0;
-                        return EngineAction::Replace {
-                            backspaces,
-                            text: String::new(),
-                        };
+                        return EngineAction::Preedit(String::new());
                     } else {
                         let out = self.phonetic.transliterate(&self.phonetic_raw_buffer);
-                        let backspaces = self.phonetic_rendered_len;
                         self.phonetic_rendered_len = out.chars().count();
-                        return EngineAction::Replace {
-                            backspaces,
-                            text: out,
-                        };
+                        return EngineAction::Preedit(out);
                     }
                 }
                 return EngineAction::Passthrough;
             }
 
-            // Word boundaries: Space, Enter, Tab commit current token
-            if key == ' ' || key == '\n' || key == '\t' {
-                self.phonetic_raw_buffer.clear();
-                self.phonetic_rendered_len = 0;
+            // Space: Word boundary -> commit composed word with space
+            if key == ' ' {
+                if !self.phonetic_raw_buffer.is_empty() {
+                    let out = self.phonetic.transliterate(&self.phonetic_raw_buffer);
+                    self.phonetic_raw_buffer.clear();
+                    self.phonetic_rendered_len = 0;
+                    return EngineAction::Commit(format!("{} ", out));
+                }
+                return EngineAction::Emit(" ".to_string());
+            }
+
+            // Enter / Return: Word boundary -> commit composed word without extra newline
+            if key == '\n' || key == '\r' {
+                if !self.phonetic_raw_buffer.is_empty() {
+                    let out = self.phonetic.transliterate(&self.phonetic_raw_buffer);
+                    self.phonetic_raw_buffer.clear();
+                    self.phonetic_rendered_len = 0;
+                    return EngineAction::Commit(out);
+                }
+                return EngineAction::Passthrough;
+            }
+
+            // Tab: Word boundary -> commit composed word with tab
+            if key == '\t' {
+                if !self.phonetic_raw_buffer.is_empty() {
+                    let out = self.phonetic.transliterate(&self.phonetic_raw_buffer);
+                    self.phonetic_raw_buffer.clear();
+                    self.phonetic_rendered_len = 0;
+                    return EngineAction::Commit(format!("{}\t", out));
+                }
+                return EngineAction::Passthrough;
+            }
+
+            // Punctuation delimiters that finish word composition
+            if matches!(key, ',' | '?' | '!' | ';' | '(' | ')' | '[' | ']' | '{' | '}' | '<' | '>' | '/' | '\\' | '"' | '\'') {
+                if !self.phonetic_raw_buffer.is_empty() {
+                    let out = self.phonetic.transliterate(&self.phonetic_raw_buffer);
+                    self.phonetic_raw_buffer.clear();
+                    self.phonetic_rendered_len = 0;
+                    return EngineAction::Commit(format!("{}{}", out, key));
+                }
                 return EngineAction::Emit(key.to_string());
             }
 
-            // Map key with Shift modifier
-            let ch = if shift && key.is_ascii_alphabetic() {
-                key.to_ascii_uppercase()
-            } else if shift && key == ';' {
-                ':'
-            } else if shift && key == '4' {
-                '$'
-            } else if shift && key == '6' {
-                '^'
-            } else {
-                key
-            };
+            // Phonetic token characters (alphanumeric and Avro symbols ., $, ^, :, `, ~, -)
+            let is_phonetic_char = key.is_ascii_alphanumeric()
+                || matches!(key, '.' | '$' | '^' | ':' | '`' | '~' | '-');
 
-            self.phonetic_raw_buffer.push(ch);
-            let out = self.phonetic.transliterate(&self.phonetic_raw_buffer);
-            let backspaces = self.phonetic_rendered_len;
-            self.phonetic_rendered_len = out.chars().count();
-            return EngineAction::Replace {
-                backspaces,
-                text: out,
-            };
+            if is_phonetic_char {
+                self.phonetic_raw_buffer.push(key);
+                let out = self.phonetic.transliterate(&self.phonetic_raw_buffer);
+                self.phonetic_rendered_len = out.chars().count();
+                return EngineAction::Preedit(out);
+            }
+
+            // Unrecognized character: commit active composition and append
+            if !self.phonetic_raw_buffer.is_empty() {
+                let out = self.phonetic.transliterate(&self.phonetic_raw_buffer);
+                self.phonetic_raw_buffer.clear();
+                self.phonetic_rendered_len = 0;
+                return EngineAction::Commit(format!("{}{}", out, key));
+            }
+
+            return EngineAction::Passthrough;
         }
 
         // 4. Borno Unicode Mode (with Pre-Kar Deferred Reordering)
@@ -245,7 +294,8 @@ impl BornoEngine {
         }
 
         let layout = &self.borno_unicode;
-        let mapped = if key == 'a' && shift {
+        let key_lower = key.to_ascii_lowercase();
+        let mapped = if key_lower == 'a' && shift {
             let last_char = self.buffer.chars().last();
             if last_char.is_none() || last_char.map(|c| c.is_whitespace() || c == '।').unwrap_or(false) {
                 "ঋ"
@@ -253,7 +303,7 @@ impl BornoEngine {
                 "র্"
             }
         } else {
-            match layout.lookup(key, shift) {
+            match layout.lookup(key_lower, shift) {
                 Some(m) => m,
                 None => {
                     // Unmapped key (Space, Enter, Tab, etc.)

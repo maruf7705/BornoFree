@@ -300,25 +300,25 @@ mod tests {
         let mut engine = BornoEngine::new();
         engine.set_mode(InputMode::Phonetic);
 
-        // Type 'a' -> "আ"
+        // Type 'a' -> Preedit "আ"
         let act1 = engine.handle_key('a', false, false, false);
-        assert_eq!(act1, EngineAction::Replace { backspaces: 0, text: "আ".to_string() });
+        assert_eq!(act1, EngineAction::Preedit("আ".to_string()));
 
-        // Type 'm' -> replaces 'অ' (1 backspace) with "আম"
+        // Type 'm' -> Preedit updates to "আম"
         let act2 = engine.handle_key('m', false, false, false);
-        assert_eq!(act2, EngineAction::Replace { backspaces: 1, text: "আম".to_string() });
+        assert_eq!(act2, EngineAction::Preedit("আম".to_string()));
 
-        // Type 'i' -> replaces 'আম' (2 backspaces) with "আমি"
+        // Type 'i' -> Preedit updates to "আমি"
         let act3 = engine.handle_key('i', false, false, false);
-        assert_eq!(act3, EngineAction::Replace { backspaces: 2, text: "আমি".to_string() });
+        assert_eq!(act3, EngineAction::Preedit("আমি".to_string()));
 
-        // Backspace removes 'i', restores 'আম' (3 backspaces for "আমি" which has 3 chars: আ, ম, ি)
+        // Backspace removes 'i', Preedit updates to "আম"
         let act4 = engine.handle_key('\x08', false, false, false);
-        assert_eq!(act4, EngineAction::Replace { backspaces: 3, text: "আম".to_string() });
+        assert_eq!(act4, EngineAction::Preedit("আম".to_string()));
 
-        // Space commits word
+        // Space commits word with space
         let act5 = engine.handle_key(' ', false, false, false);
-        assert_eq!(act5, EngineAction::Emit(" ".to_string()));
+        assert_eq!(act5, EngineAction::Commit("আম ".to_string()));
     }
 
     #[test]

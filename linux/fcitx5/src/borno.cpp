@@ -9,6 +9,8 @@
 #include <fcitx/inputcontext.h>
 #include <fcitx/inputcontextproperty.h>
 #include <fcitx/inputmethodengine.h>
+#include <fcitx/inputpanel.h>
+#include <fcitx/text.h>
 #include <fcitx-utils/keysym.h>
 
 namespace {
@@ -41,12 +43,16 @@ bool normalizeKey(const fcitx::KeyEvent &event, uint32_t *key) {
         *key = '\t';
         return true;
     }
+    if (sym == FcitxKey_Escape) {
+        *key = '\x1b';
+        return true;
+    }
 
     const auto text = fcitx::Key::keySymToUTF8(sym);
     if (text.size() != 1 || static_cast<unsigned char>(text[0]) > 0x7f) {
         return false;
     }
-    *key = static_cast<uint32_t>(std::tolower(static_cast<unsigned char>(text[0])));
+    *key = static_cast<uint32_t>(static_cast<unsigned char>(text[0]));
     return true;
 }
 
@@ -60,11 +66,26 @@ void eraseBeforeCursor(fcitx::InputContext *inputContext, size_t count) {
         return;
     }
 
-    // Some terminal and legacy XIM clients do not expose surrounding text.
-    // Forwarding real Backspace events still gives them the required replacement.
+    // Fallback for terminal and legacy XIM clients that do not expose surrounding text.
     for (size_t i = 0; i < count; ++i) {
         inputContext->forwardKey(fcitx::Key(FcitxKey_BackSpace));
     }
+}
+
+void updatePreedit(fcitx::InputContext *inputContext, const std::string &text) {
+    if (text.empty()) {
+        inputContext->inputPanel().reset();
+        inputContext->updatePreedit();
+        inputContext->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel);
+        return;
+    }
+
+    fcitx::Text preeditText(text, fcitx::TextFormatFlag::Underline);
+    preeditText.setCursor(static_cast<int>(text.size()));
+    inputContext->inputPanel().setClientPreedit(preeditText);
+    inputContext->inputPanel().setPreedit(preeditText);
+    inputContext->updatePreedit();
+    inputContext->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel);
 }
 
 class BornoFcitxEngine final : public fcitx::InputMethodEngineV2 {
@@ -78,7 +99,9 @@ public:
     ~BornoFcitxEngine() override = default;
 
     void activate(const fcitx::InputMethodEntry &entry, fcitx::InputContextEvent &event) override {
-        auto *state = event.inputContext()->propertyFor(&stateFactory_);
+        auto *inputContext = event.inputContext();
+        updatePreedit(inputContext, "");
+        auto *state = inputContext->propertyFor(&stateFactory_);
         state->reset();
         if (entry.uniqueName() == "borno-phonetic") {
             borno_engine_set_mode(state->engine(), 3);
@@ -88,6 +111,8 @@ public:
     }
 
     void deactivate(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) override {
+        auto *inputContext = event.inputContext();
+        updatePreedit(inputContext, "");
         event.inputContext()->propertyFor(&stateFactory_)->reset();
     }
 
@@ -107,9 +132,13 @@ public:
         const auto alt = states.test(fcitx::KeyState::Alt) ? 1 : 0;
         auto *inputContext = event.inputContext();
         auto *state = inputContext->propertyFor(&stateFactory_);
+
         if (entry.uniqueName() == "borno-phonetic") {
             borno_engine_set_mode(state->engine(), 3);
+        } else {
+            borno_engine_set_mode(state->engine(), 1);
         }
+
         const auto action = borno_engine_handle_key(state->engine(), key, shift, ctrl, alt);
 
         std::string text = action.text == nullptr ? "" : action.text;
@@ -117,6 +146,27 @@ public:
 
         if (action.kind == BORNO_ACTION_PASSTHROUGH ||
             action.kind == BORNO_ACTION_MODE_SWITCH) {
+            return;
+        }
+
+        if (action.kind == BORNO_ACTION_PREEDIT) {
+            updatePreedit(inputContext, text);
+            event.accept();
+            return;
+        }
+
+        if (action.kind == BORNO_ACTION_COMMIT) {
+            updatePreedit(inputContext, "");
+            if (!text.empty()) {
+                inputContext->commitString(text);
+            }
+            event.accept();
+            return;
+        }
+
+        if (action.kind == BORNO_ACTION_RESET) {
+            updatePreedit(inputContext, "");
+            event.accept();
             return;
         }
 
@@ -130,7 +180,9 @@ public:
     }
 
     void reset(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) override {
-        event.inputContext()->propertyFor(&stateFactory_)->reset();
+        auto *inputContext = event.inputContext();
+        updatePreedit(inputContext, "");
+        inputContext->propertyFor(&stateFactory_)->reset();
     }
 
 private:

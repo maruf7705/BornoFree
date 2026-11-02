@@ -13,6 +13,9 @@ enum BornoActionKind {
     BORNO_ACTION_EMIT = 1,
     BORNO_ACTION_REPLACE = 2,
     BORNO_ACTION_MODE_SWITCH = 3,
+    BORNO_ACTION_PREEDIT = 4,
+    BORNO_ACTION_COMMIT = 5,
+    BORNO_ACTION_RESET = 6,
 };
 
 typedef struct BornoEngine BornoEngine;

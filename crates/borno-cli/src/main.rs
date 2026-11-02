@@ -115,6 +115,9 @@ fn main() -> io::Result<()> {
                                         }
                                         converted.push_str(&text);
                                     }
+                                    EngineAction::Preedit(_) => {}
+                                    EngineAction::Commit(s) => converted.push_str(&s),
+                                    EngineAction::Reset => {}
                                     EngineAction::Passthrough => converted.push(c),
                                     EngineAction::ModeSwitch(_) => {}
                                 }
