@@ -35,7 +35,7 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Run Tests
-        run: cargo test --workspace --release
+        run: cargo test --workspace --release --features borno-installer/windows-installer
 
       - name: Build & Package Release
         shell: pwsh

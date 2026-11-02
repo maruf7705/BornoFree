@@ -47,7 +47,7 @@ if (-not (Test-Path $releaseExe)) {
 Copy-Item $releaseExe (Join-Path $rootDir "BornoFree.exe") -Force
 
 Write-Host "`n[2/5] Building Graphical Setup Wizard (BornoFree-Setup.exe)..." -ForegroundColor Yellow
-& cargo build --release --bin BornoFree-Setup
+& cargo build --release --bin BornoFree-Setup --features windows-installer
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Cargo build of BornoFree-Setup failed with exit code $LASTEXITCODE"
     exit 1

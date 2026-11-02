@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/borno-core",
+    "crates/borno-ffi",
     "crates/borno-cli",
     "crates/borno-installer",
 ]

@@ -80,6 +80,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "borno-ffi"
+version = "1.0.1"
+dependencies = [
+ "borno-core",
+]
+
+[[package]]
 name = "borno-installer"
 version = "1.0.1"
 dependencies = [

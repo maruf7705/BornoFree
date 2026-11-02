@@ -9,8 +9,12 @@ description = "Native Windows GUI Setup Wizard Installer for BornoFree"
 [[bin]]
 name = "BornoFree-Setup"
 path = "src/main.rs"
+required-features = ["windows-installer"]
+
+[features]
+windows-installer = []
 
 [dependencies]
 
-[build-dependencies]
+[target.'cfg(windows)'.build-dependencies]
 winres = "0.1.12"

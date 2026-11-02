@@ -1,17 +1,17 @@
+#[cfg(target_os = "windows")]
 fn main() {
-    if std::env::var("CARGO_CFG_TARGET_OS").unwrap() == "windows" {
-        let mut res = winres::WindowsResource::new();
-        res.set_icon("../borno-cli/icons/bornofree.ico");
-        res.set("FileDescription", "BornoFree Setup Wizard");
-        res.set("ProductName", "BornoFree Setup");
-        res.set("ProductVersion", "1.0.1");
-        res.set("FileVersion", "1.0.1.0");
-        res.set("InternalName", "BornoFree-Setup");
-        res.set("OriginalFilename", "BornoFree-Setup.exe");
-        res.set("LegalCopyright", "Copyright (c) 2026 Maruf Islam");
-        
-        // High DPI and Common Controls Manifest
-        res.set_manifest(r#"
+    let mut res = winres::WindowsResource::new();
+    res.set_icon("../borno-cli/icons/bornofree.ico");
+    res.set("FileDescription", "BornoFree Setup Wizard");
+    res.set("ProductName", "BornoFree Setup");
+    res.set("ProductVersion", "1.0.1");
+    res.set("FileVersion", "1.0.1.0");
+    res.set("InternalName", "BornoFree-Setup");
+    res.set("OriginalFilename", "BornoFree-Setup.exe");
+    res.set("LegalCopyright", "Copyright (c) 2026 Maruf Islam");
+
+    // High DPI and Common Controls Manifest
+    res.set_manifest(r#"
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0" xmlns:asmv3="urn:schemas-microsoft-com:asm.v3">
   <assemblyIdentity version="1.0.1.0" name="BornoFree.Setup"/>
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
@@ -35,8 +35,10 @@ fn main() {
 </assembly>
 "#);
 
-        if let Err(e) = res.compile() {
-            eprintln!("Warning: Failed to compile windows resource: {}", e);
-        }
+    if let Err(e) = res.compile() {
+        eprintln!("Warning: Failed to compile windows resource: {}", e);
     }
 }
+
+#[cfg(not(target_os = "windows"))]
+fn main() {}

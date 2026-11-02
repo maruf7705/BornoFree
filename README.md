@@ -1,11 +1,11 @@
 # BornoFree (বর্ণফ্রি)
 
-High-Performance Bengali Typing Engine and Input Method Architecture for Windows
+High-Performance Bengali Typing Engine and Input Method Architecture for Windows and Linux
 
 > **Notice:** BornoFree is an independent project and is not affiliated with Bijoy or Ananda Computers.
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-success.svg)](https://github.com/maruf7705/BornoFree)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Arch%20Linux-success.svg)](https://github.com/maruf7705/BornoFree)
 [![Language](https://img.shields.io/badge/language-Rust%202021-orange.svg)](https://www.rust-lang.org/)
 [![Version](https://img.shields.io/badge/version-1.0.1-green.svg)](https://github.com/maruf7705/BornoFree/releases)
 
@@ -18,6 +18,30 @@ High-Performance Bengali Typing Engine and Input Method Architecture for Windows
 BornoFree is a high-performance, open-source Bengali input method and typing engine engineered in pure Rust. Built to provide a clean, modern alternative for desktop Bengali input, BornoFree eliminates typing latency, removes dependencies on legacy runtime frameworks such as .NET Framework 3.5, and provides native, reliable Bengali Unicode text input across modern desktop applications.
 
 The application features a non-intrusive floating pill toolbar with integrated Light and Dark themes, zero-latency buffer transformation, full support for modern Bengali Unicode and phonetic typing, and an authentic Windows Setup Wizard for seamless deployment.
+
+### Arch Linux + Hyprland: headless Fcitx5 mode
+
+BornoFree now ships a native Fcitx5 input-method addon for Arch Linux and
+Hyprland. It reuses the same Borno Unicode engine but does **not** create a
+floating toolbar or standalone window. Fcitx5's Status Notifier appears as the
+single `EN`/`অ` icon in Waybar's tray, while Hyprland owns the global mode keys:
+
+| Shortcut | Result |
+| :--- | :--- |
+| `F12` | Toggle English and Borno Unicode |
+| `Ctrl + Alt + V` | Select Borno Unicode (`অ`) |
+| `Ctrl + Alt + E` | Select English (`EN`) |
+
+Build the included local Arch package and configure the current Hyprland user:
+
+```bash
+sudo pacman -S --needed base-devel cmake ninja rust fcitx5 fcitx5-gtk fcitx5-qt waybar python
+makepkg -si
+borno-hyprland-setup
+```
+
+Detailed setup, verification, alternative keyboard names, and rollback are in
+[the Arch + Hyprland guide](linux/docs/ARCH_HYPRLAND.md).
 
 ---
 
@@ -86,6 +110,7 @@ BornoFree/
 │   │   ├── src/unicode.rs          # Borno Unicode layout mapping
 │   │   ├── src/engine.rs           # Finite state machine and conjunct reordering
 │   │   └── src/phonetic.rs         # Trie-based phonetic transliteration engine
+│   ├── borno-ffi/                  # C ABI bridge used by the Linux Fcitx5 addon
 │   ├── borno-cli/                  # Windows GUI floating toolbar and keyboard hook
 │   │   ├── build.rs                # Windows PE resource and high-DPI manifest compiler
 │   │   ├── icons/                  # Multi-resolution ICO and embedded graphics

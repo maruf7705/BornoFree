@@ -1,11 +1,11 @@
-#![windows_subsystem = "windows"]
+#![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
 
+#[cfg(target_os = "windows")]
 mod gui;
+#[cfg(target_os = "windows")]
 mod windows_hook;
 
-use borno_core::{
-    BornoEngine, EngineAction, InputMode, PhoneticEngine,
-};
+use borno_core::{BornoEngine, EngineAction, InputMode, PhoneticEngine};
 use clap::{Parser, Subcommand, ValueEnum};
 use colored::*;
 use rustyline::DefaultEditor;
@@ -15,7 +15,7 @@ use std::io;
 #[command(name = "BornoFree")]
 #[command(author = "BornoFree Contributors")]
 #[command(version = "1.0.0")]
-#[command(about = "BornoFree: High-Performance Bengali Typing Engine for Windows", long_about = None)]
+#[command(about = "BornoFree: High-Performance Bengali Typing Engine", long_about = None)]
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
@@ -47,7 +47,9 @@ enum CliMode {
 }
 
 fn main() -> io::Result<()> {
-    let cli = Cli::try_parse().unwrap_or(Cli { command: Some(Commands::Run) });
+    let cli = Cli::try_parse().unwrap_or(Cli {
+        command: Some(Commands::Run),
+    });
     let command = cli.command.unwrap_or(Commands::Run);
 
     match command {
@@ -59,13 +61,13 @@ fn main() -> io::Result<()> {
             }
             #[cfg(not(target_os = "windows"))]
             {
-                println!("System-wide hook is currently enabled for Windows.");
+                println!("The Linux system input method is the BornoFree Fcitx5 addon. Install the Arch package, run `borno-hyprland-setup`, then use Ctrl+Alt+V, Ctrl+Alt+E, or F12.");
             }
         }
         Commands::Info => {
             println!("{}", "=== BornoFree Engine Information ===".bold().cyan());
             println!("Version: {}", "1.0.0".green());
-            println!("Platform: Cross-Platform (Windows, Linux, macOS)");
+            println!("Platform: Windows native hook and Linux Fcitx5 addon");
             println!("Supported Layouts:");
             println!("  - Borno Unicode (Ctrl+Alt+V)");
             println!("  - Avro Phonetic");
@@ -89,7 +91,8 @@ fn main() -> io::Result<()> {
             println!("Active Mode: {}", input_mode.name().yellow());
             println!("Type text and press Enter. Press Ctrl+D or Ctrl+C to exit.\n");
 
-            let mut rl = DefaultEditor::new().map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+            let mut rl =
+                DefaultEditor::new().map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
             loop {
                 let prompt = format!("{}> ", engine.mode.badge().magenta());

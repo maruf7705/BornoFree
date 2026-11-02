@@ -2,3 +2,7 @@
 scripts/* linguist-vendored
 *.cmd linguist-vendored
 *.ps1 linguist-vendored
+
+# Linux Fcitx5 integration must remain executable with Unix line endings.
+/linux/** text eol=lf
+PKGBUILD text eol=lf

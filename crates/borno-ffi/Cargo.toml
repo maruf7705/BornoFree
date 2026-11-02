@@ -1,0 +1,14 @@
+[package]
+name = "borno-ffi"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Stable C ABI bridge for the BornoFree typing engine"
+
+[lib]
+name = "borno_ffi"
+crate-type = ["rlib", "staticlib"]
+
+[dependencies]
+borno-core = { path = "../borno-core" }

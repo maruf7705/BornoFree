@@ -1,0 +1,46 @@
+name: Arch Linux Fcitx5 addon
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Cargo.*'
+      - 'crates/**'
+      - 'linux/**'
+      - 'PKGBUILD'
+      - '.github/workflows/arch.yml'
+  pull_request:
+    paths:
+      - 'Cargo.*'
+      - 'crates/**'
+      - 'linux/**'
+      - 'PKGBUILD'
+      - '.github/workflows/arch.yml'
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: Install build dependencies
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --needed --noconfirm base-devel cmake ninja rust fcitx5 fcitx5-gtk fcitx5-qt waybar python git
+      - uses: actions/checkout@v4
+      - name: Test Rust workspace
+        run: cargo test --workspace
+      - name: Test Hyprland integration helpers
+        run: |
+          python -m unittest discover -s linux/tests -p 'test_*.py' -v
+          bash linux/tests/test_fcitxctl.sh
+      - name: Build and test Fcitx5 addon
+        run: |
+          cmake -S linux/fcitx5 -B build-linux -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-linux
+          ctest --test-dir build-linux --output-on-failure
+      - name: Build the Arch package
+        run: |
+          useradd -m builder
+          chown -R builder:builder "$GITHUB_WORKSPACE"
+          su builder -c 'cd "$GITHUB_WORKSPACE" && makepkg --syncdeps --noconfirm --noprogressbar'

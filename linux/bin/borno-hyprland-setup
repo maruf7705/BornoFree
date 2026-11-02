@@ -1,0 +1,251 @@
+#!/usr/bin/env python3
+"""Install or remove BornoFree's user-scoped Hyprland and Fcitx5 wiring."""
+
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import json
+import os
+import re
+import shutil
+import sys
+from pathlib import Path
+
+START = "# >>> BornoFree Hyprland integration >>>"
+END = "# <<< BornoFree Hyprland integration <<<"
+BLOCK = f"""{START}
+# Headless Fcitx5 input method: only the Waybar tray status icon is shown.
+env = GTK_IM_MODULE,fcitx
+env = QT_IM_MODULE,fcitx
+env = XMODIFIERS,@im=fcitx
+env = SDL_IM_MODULE,fcitx
+exec-once = fcitx5 -d
+bind = , F12, exec, borno-fcitxctl toggle
+bind = CTRL ALT, V, exec, borno-fcitxctl bangla
+bind = CTRL ALT, E, exec, borno-fcitxctl english
+{END}
+"""
+
+
+def xdg_dir(name: str, fallback: Path) -> Path:
+    value = os.environ.get(name)
+    return Path(value).expanduser() if value else fallback
+
+
+def default_hypr_config(config_home: Path) -> Path:
+    return config_home / "hypr" / "hyprland.conf"
+
+
+def default_waybar_config(config_home: Path) -> Path | None:
+    for name in ("config.jsonc", "config"):
+        candidate = config_home / "waybar" / name
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def load_state(path: Path) -> dict:
+    if not path.exists():
+        return {"backups": {}}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def save_state(path: Path, state: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+
+
+def backup_once(state: dict, state_dir: Path, path: Path, key: str) -> None:
+    """Record an exact restore point, including files setup creates from scratch."""
+    if key in state["backups"]:
+        return
+    if not path.exists():
+        state["backups"][key] = {"source": str(path), "backup": None}
+        return
+    stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+    backup = state_dir / f"{key}-{stamp}.bak"
+    backup.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(path, backup)
+    state["backups"][key] = {"source": str(path), "backup": str(backup)}
+
+
+def replace_or_append_marker(path: Path) -> bool:
+    text = path.read_text(encoding="utf-8") if path.exists() else ""
+    pattern = re.compile(re.escape(START) + r".*?" + re.escape(END) + r"\s*", re.DOTALL)
+    if pattern.search(text):
+        updated = pattern.sub(BLOCK, text)
+    else:
+        updated = text.rstrip() + ("\n\n" if text.strip() else "") + BLOCK
+    if updated == text:
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(updated, encoding="utf-8")
+    return True
+
+
+def ensure_profile(profile: Path) -> bool:
+    """Add Borno and US keyboard to the first Fcitx group without removals."""
+    if not profile.exists():
+        profile.parent.mkdir(parents=True, exist_ok=True)
+        profile.write_text(
+            "[Groups/0]\nName=Default\nDefault Layout=us\nDefaultIM=keyboard-us\n\n"
+            "[Groups/0/Items/0]\nName=keyboard-us\nLayout=\n\n"
+            "[Groups/0/Items/1]\nName=borno\nLayout=\n\n[GroupOrder]\n0=Default\n",
+            encoding="utf-8",
+        )
+        return True
+
+    text = profile.read_text(encoding="utf-8")
+    groups = re.findall(r"^\[Groups/(\d+)]\s*$", text, flags=re.MULTILINE)
+    if not groups:
+        raise RuntimeError(f"No Fcitx input-method group was found in {profile}.")
+    group = groups[0]
+    item_pattern = re.compile(
+        rf"^\[Groups/{re.escape(group)}/Items/(\d+)]\s*$([\s\S]*?)(?=^\[|\Z)",
+        re.MULTILINE,
+    )
+    items = item_pattern.findall(text)
+    names = {
+        match.group(1)
+        for _, body in items
+        if (match := re.search(r"^Name=(.+)$", body, flags=re.MULTILINE))
+    }
+    next_index = max((int(index) for index, _ in items), default=-1) + 1
+    additions: list[str] = []
+    for name in ("keyboard-us", "borno"):
+        if name not in names:
+            additions.append(f"[Groups/{group}/Items/{next_index}]\nName={name}\nLayout=\n")
+            next_index += 1
+    if not additions:
+        return False
+    profile.write_text(text.rstrip() + "\n\n" + "\n".join(additions), encoding="utf-8")
+    return True
+
+
+def strip_jsonc(source: str) -> str:
+    """Remove JSONC comments without touching quoted URLs or strings."""
+    result: list[str] = []
+    index = 0
+    quoted = False
+    escaped = False
+    while index < len(source):
+        char = source[index]
+        nxt = source[index + 1] if index + 1 < len(source) else ""
+        if quoted:
+            result.append(char)
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                quoted = False
+            index += 1
+        elif char == '"':
+            quoted = True
+            result.append(char)
+            index += 1
+        elif char == "/" and nxt == "/":
+            index = source.find("\n", index)
+            if index == -1:
+                break
+        elif char == "/" and nxt == "*":
+            end = source.find("*/", index + 2)
+            index = len(source) if end == -1 else end + 2
+        else:
+            result.append(char)
+            index += 1
+    return re.sub(r",\s*([}\]])", r"\1", "".join(result))
+
+
+def ensure_waybar_tray(config: Path) -> bool:
+    data = json.loads(strip_jsonc(config.read_text(encoding="utf-8")))
+    bars = data if isinstance(data, list) else [data]
+    changed = False
+    for bar in bars:
+        if not isinstance(bar, dict):
+            continue
+        modules = bar.setdefault("modules-right", [])
+        if not isinstance(modules, list):
+            raise RuntimeError("Waybar modules-right must be a JSON array.")
+        if "tray" not in modules:
+            modules.append("tray")
+            changed = True
+        if "tray" not in bar:
+            bar["tray"] = {"icon-size": 18, "spacing": 6}
+            changed = True
+    if changed:
+        config.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return changed
+
+
+def restore(state_path: Path) -> int:
+    state = load_state(state_path)
+    backups = state.get("backups", {})
+    if not backups:
+        print("BornoFree: no setup backup exists; nothing changed.")
+        return 0
+    for name, item in backups.items():
+        source = Path(item["source"])
+        backup_name = item["backup"]
+        if backup_name is None:
+            source.unlink(missing_ok=True)
+            print(f"removed {source}")
+            continue
+        backup = Path(backup_name)
+        if not backup.exists():
+            raise RuntimeError(f"Missing backup for {name}: {backup}")
+        source.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(backup, source)
+        print(f"restored {source}")
+    state_path.unlink(missing_ok=True)
+    return 0
+
+
+def main() -> int:
+    home = Path.home()
+    config_home = xdg_dir("XDG_CONFIG_HOME", home / ".config")
+    state_dir = xdg_dir("XDG_STATE_HOME", home / ".local" / "state") / "borno-free"
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--config", type=Path, default=default_hypr_config(config_home),
+                        help="Hyprland .conf file to update")
+    parser.add_argument("--waybar-config", type=Path, default=default_waybar_config(config_home),
+                        help="Waybar JSON/JSONC config; omit only when Waybar is not configured yet")
+    parser.add_argument("--remove", action="store_true", help="restore the configuration backups from setup")
+    args = parser.parse_args()
+    state_path = state_dir / "setup-state.json"
+    if args.remove:
+        return restore(state_path)
+    if args.config.suffix != ".conf":
+        raise RuntimeError("Use a Hyprland .conf path; Lua configurations require adding equivalent binds manually.")
+    if not args.config.exists():
+        raise RuntimeError(f"Hyprland config not found: {args.config}")
+    if args.waybar_config is None:
+        raise RuntimeError("Waybar config was not found; pass --waybar-config after enabling Waybar.")
+    if not args.waybar_config.exists():
+        raise RuntimeError(f"Waybar config not found: {args.waybar_config}")
+
+    state = load_state(state_path)
+    backup_once(state, state_dir, args.config, "hyprland")
+    profile = config_home / "fcitx5" / "profile"
+    backup_once(state, state_dir, profile, "fcitx-profile")
+    backup_once(state, state_dir, args.waybar_config, "waybar")
+    # Persist restore points before changing any configuration file.
+    save_state(state_path, state)
+    changed = replace_or_append_marker(args.config)
+    changed = ensure_profile(profile) or changed
+
+    changed = ensure_waybar_tray(args.waybar_config) or changed
+
+    save_state(state_path, state)
+    status = "updated" if changed else "already configured"
+    print(f"BornoFree Hyprland setup {status}. Log out and back in, then use F12, Ctrl+Alt+V, or Ctrl+Alt+E.")
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except (OSError, RuntimeError, json.JSONDecodeError) as error:
+        print(f"BornoFree setup failed: {error}", file=sys.stderr)
+        raise SystemExit(1)
